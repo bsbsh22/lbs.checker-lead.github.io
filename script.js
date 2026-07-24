@@ -384,6 +384,7 @@ async function renderServers(servers) {
   els.serversSection.hidden = false;
   els.btnStart.style.display = 'none';
   logMaster(`Найдено серверов: ${servers.length}`, 'ok');
+  els.startScreen.remove();
   // Auto check? no, wait for user to press "проверить все"
 }
 
