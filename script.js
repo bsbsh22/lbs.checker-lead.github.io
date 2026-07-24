@@ -283,7 +283,7 @@ function checkSingleServer(server, cardEl) {
       const lb = parseLeaderboard(ev.data);
 
       const pingClass = ping < 120 ? 'fast' : ping < 300 ? 'mid' : 'slow';
-      let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(ping)} ms</span> | Размер ответа: ${bytes.length} байт</div>`;
+      let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(ping)} ms</span></div>`;
 
       if (lb.hasData && lb.players.length) {
         html += `<div class="leaderboard"><div class="leaderboard-title">Топ 3 игрока</div>`;
