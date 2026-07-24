@@ -353,7 +353,7 @@ function createServerCard(server) {
     <div class="server-meta">
       <span>🌐 ${escapeHtml(server.url)}</span>
       <span>🔌 ${server.port}</span>
-      <span>wss://${escapeHtml(server.url)}:${server.port}</span>
+      
     </div>
     <div class="server-body"><em>Не проверен</em></div>
     <button class="btn-check-single">Проверить</button>
