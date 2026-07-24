@@ -294,7 +294,7 @@ function checkSingleServer(server, cardEl) {
             <div class="player-pos">${p.rank}</div>
             <div class="player-name" title="${p.name} (${p.id})">${p.name}</div>
             <div class="player-mass">${massStr}${big}</div>
-            <div class="player-extra ${p.badgeClass}">${p.badge || ''} #${p.id}</div>
+            <div class="player-extra ${p.badgeClass}">${p.badge || ''}</div>
           </div>`;
         });
         html += `</div>`;
