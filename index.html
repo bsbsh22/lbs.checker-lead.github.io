@@ -1,1 +1,42 @@
-start
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LittleBigSnake - Проверка серверов</title>
+  <link rel="icon" type="image/png" href="assets/mobile-header-logo.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <img src="assets/mobile-header-logo.png" alt="LITTLE BIG SNAKE" id="logo">
+  </header>
+
+  <main>
+    <div id="start-screen" class="center">
+      <button id="btn-start" class="btn-start">НАЧАТЬ</button>
+      <div id="master-status" style="display:none"></div>
+    </div>
+
+    <div id="servers-section" hidden>
+      <div id="servers" class="servers-grid"></div>
+      <div class="actions">
+        <button id="btn-check-all" class="btn-action">проверить все сервера</button>
+      </div>
+      <div class="footer-note">
+        Логика: подключаемся к <code>wss://master.littlebigsnake.com:8443/</code>, отправляем 4 пакета, ждем сообщение с тегом AF (175) — парсим список серверов (BE).<br>
+        Затем для каждого сервера <code>wss://&lt;url&gt;:&lt;port&gt;</code> отправляем <code>000E050000000000002C00000000</code> (из C# кода, в ТЗ также <code>000A0500000000000021</code>), ждем тег 6, разбираем отступ 6608 — топ 3 игрока (позиция, имя, масса, ID, бейдж).<br>
+        <span style="opacity:0.7">Деплой: залейте папку на GitHub Pages (ветка gh-pages / docs / main root).</span>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // show status box once start is pressed
+    const btnStart = document.getElementById('btn-start');
+    const statusBox = document.getElementById('master-status');
+    btnStart.addEventListener('click', ()=> { statusBox.style.display='block'; }, {once:true});
+  </script>
+  <script src="script.js"></script>
+</body>
+</html>
