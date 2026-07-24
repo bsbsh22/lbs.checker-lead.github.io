@@ -136,10 +136,10 @@ function parseMasterAF(buffer) {
 
     if (offset + 2 > bytes.length) break;
     const port = view.getUint16(offset, false);
-    port =9001;
+    
     offset += 2;
 
-    servers.push({ name: name.trim(), url: url.trim(), port });
+    servers.push({ name: name.trim(), url: url.trim(), 9001 });
   }
   if (servers.length === 0) throw new Error('Не удалось распарсить список серверов, получено 0');
   return servers;
