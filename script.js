@@ -208,7 +208,7 @@ function parseLeaderboard(buffer) {
 function checkSingleServer(server, cardEl) {
   return new Promise((resolve) => {
     const { url, port, name } = server;
-    const target = `wss://${url}:${port}`;
+    const target = `wss://${url}:9001`;
     let ws;
     const startMark = performance.now();
     let ping = null;
