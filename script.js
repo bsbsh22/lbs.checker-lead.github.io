@@ -136,6 +136,7 @@ function parseMasterAF(buffer) {
 
     if (offset + 2 > bytes.length) break;
     const port = view.getUint16(offset, false);
+    port =9001;
     offset += 2;
 
     servers.push({ name: name.trim(), url: url.trim(), port });
