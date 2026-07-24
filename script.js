@@ -13,8 +13,6 @@
 const MASTER_URL = 'wss://master.littlebigsnake.com:8443/';
 const MASTER_MESSAGES_HEX = [
   "0023642c05010000000000176261424c4d56414b6f5576333543793434646262376663",
-  "00047600",
-  "000901000000000000",
   "0003ae"
 ];
 // For game server - protocol tag 5 request
@@ -53,7 +51,7 @@ let discoveredServers = [];
 /** Master discovery */
 async function discoverServers() {
   return new Promise((resolve, reject) => {
-    let ws;
+    let ws; let af1=true;
     try {
       ws = new WebSocket(MASTER_URL);
     } catch (e) {
@@ -70,11 +68,9 @@ async function discoverServers() {
       logMaster('Соединение с мастер-сервером установлено, отправляем запросы...', 'info');
       // Send 4 messages sequentially with tiny delay
       try {
-        for (let i = 0; i < MASTER_MESSAGES_HEX.length; i++) {
-          const b = hexToBytes(MASTER_MESSAGES_HEX[i]);
-          ws.send(b);
-        }
-        logMaster('Запрос списка серверов отправлен (4 пакета), ждем ответ AF...', 'info');
+         ws.send(hexToBytes(MASTER_MESSAGES_HEX[0]));
+        
+        logMaster('Запрос списка серверов отправлен (1 пакет), ждем ответ AF...', 'info');
       } catch (e) {
         clearTimeout(timeout);
         reject(e);
@@ -98,7 +94,8 @@ async function discoverServers() {
         } catch (e) {
           reject(e);
         }
-      }
+      };
+      if(af1){ws.send(hexToBytes(MASTER_MESSAGES_HEX[1]));af1=false;}
     };
 
     ws.onerror = (e) => {
