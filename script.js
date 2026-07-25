@@ -180,7 +180,7 @@ function parseLeaderboard(buffer) {
       const mateg = view.getUint8(cur); cur++;
       let badge = '';
       let badgeClass = '';
-      if (mateg === 4 || mateg === 5 || mateg === 3) { badge = '!!!'; badgeClass = 'bang'; }
+      if (mateg === 4 || mateg === 5 || mateg === 3) { badge = '💀'; badgeClass = 'bang'; }
       else if (mateg === 1) { badge = 'top'; badgeClass = 'top'; }
       if (cur + 4 > slice.length) break;
       const id = view.getUint32(cur, false);
@@ -291,7 +291,7 @@ function checkSingleServer(server, cardEl) {
         html += `<div class="leaderboard"><div class="leaderboard-title">Топ 3 игрока</div>`;
         lb.players.forEach(p => {
           const massStr = p.mass.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-          const big = p.mass > 1000000 ? ' 🔥' : '';
+          const big = p.mass > 1000000 ? ' 🍖' : '';
           html += `<div class="player-row">
             <div class="player-pos">${p.rank}</div>
             <div class="player-name" title="${p.name} (${p.id})">${p.name}</div>
