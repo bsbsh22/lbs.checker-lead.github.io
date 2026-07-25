@@ -290,7 +290,7 @@ function checkSingleServer(server, cardEl) {
       if (lb.hasData && lb.players.length) {
         html += `<div class="leaderboard"><div class="leaderboard-title">Топ 3 игрока</div>`;
         lb.players.forEach(p => {
-          const massStr = p.mass.toString();
+          const massStr = p.mass.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
           const big = p.mass > 1000000 ? ' 🔥' : '';
           html += `<div class="player-row">
             <div class="player-pos">${p.rank}</div>
