@@ -47,6 +47,7 @@ function logMaster(msg, cls='info') {
 }
 
 let discoveredServers = [];
+let discoveredServers_ts = JSON.parse('[{"name":"eu_Moscow","url":"moscow.littlebigsnake.com","port":9001},{"name":"eu_Stockholm","url":"stockholm.littlebigsnake.com","port":9001},{"name":"eu_Frankfurt","url":"frankfurt.littlebigsnake.com","port":9001},{"name":"eu_Amsterdam","url":"amsterdam.littlebigsnake.com","port":9001},{"name":"eu_Paris","url":"paris.littlebigsnake.com","port":9001},{"name":"eu_London","url":"london.littlebigsnake.com","port":9001},{"name":"as_TelAviv","url":"tel-aviv.littlebigsnake.com","port":9001},{"name":"eu_Madrid","url":"madrid.littlebigsnake.com","port":9001},{"name":"as_Bahrain","url":"bahrain.littlebigsnake.com","port":9001},{"name":"as_Delhi","url":"delhi.littlebigsnake.com","port":9001},{"name":"as_Mumbai","url":"mumbai.littlebigsnake.com","port":9001},{"name":"as_Seoul","url":"seoul.littlebigsnake.com","port":9001},{"name":"as_HongKong","url":"hong-kong.littlebigsnake.com","port":9001},{"name":"as_Tokyo","url":"tokyo.littlebigsnake.com","port":9001},{"name":"na_NewYork","url":"new-york.littlebigsnake.com","port":9001},{"name":"na_Toronto","url":"toronto.littlebigsnake.com","port":9001},{"name":"na_Chicago","url":"chicago.littlebigsnake.com","port":9001},{"name":"na_Seattle","url":"seattle.littlebigsnake.com","port":9001},{"name":"as_Singapore","url":"singapore.littlebigsnake.com","port":9001},{"name":"af_Johannesburg","url":"johannesburg.littlebigsnake.com","port":9001},{"name":"na_Dallas","url":"dallas.littlebigsnake.com","port":9001},{"name":"na_Miami","url":"miami.littlebigsnake.com","port":9001},{"name":"na_LosAngeles","url":"los-angeles.littlebigsnake.com","port":9001},{"name":"sa_SaoPaulo","url":"sao-paulo.littlebigsnake.com","port":9001},{"name":"sa_Santiago","url":"santiago.littlebigsnake.com","port":9001},{"name":"au_Sydney","url":"sydney.littlebigsnake.com","port":9001}]');
 
 /** Master discovery */
 async function discoverServers() {
@@ -444,7 +445,7 @@ els.btnStart.addEventListener('click', async () => {
     // hook demo button
     setTimeout(() => {
       const demoBtn = document.getElementById('demo');
-      if (demoBtn) demoBtn.onclick = () => renderServers(mockServersForDemo());
+      if (true) demoBtn.onclick = () => renderServers(discoveredServers_ts);
     }, 100);
   } finally {
     els.btnStart.disabled = false;
