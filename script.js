@@ -436,9 +436,10 @@ els.btnStart.addEventListener('click', async () => {
   els.btnStart.textContent = 'ИЩУ...';
   logMaster('Подключаюсь к мастеру '+MASTER_URL, 'info');
   try {
-    const servers = await discoverServers();
-    logMaster(`Успех! Получено ${servers.length} серверов`, 'ok');
-    setTimeout(() => renderServers(servers), 400);
+    //const servers = await discoverServers();
+    //logMaster(`Успех! Получено ${servers.length} серверов`, 'ok');
+    //setTimeout(() => renderServers(servers), 400);
+    renderServers(discoveredServers_ts);
   } catch (e) {
     console.error(e);
     logMaster(`Ошибка: ${e.message}<br><small>Попробуйте еще раз. Возможно мастер недоступен или блокирует wss из браузера (CORS). Для теста можно показать демо-сервера ниже.</small><br><button id="demo" style="margin-top:8px;padding:6px 12px;border-radius:8px;border:1px solid #fff;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer;">Показать демо список</button>`, 'err');
