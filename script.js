@@ -25,8 +25,48 @@ const els = {
   masterStatus: document.getElementById('master-status'),
   serversSection: document.getElementById('servers-section'),
   serversGrid: document.getElementById('servers'),
-  btnCheckAll: document.getElementById('btn-check-all')
+  btnCheckAll: document.getElementById('btn-check-all'),
+  btnPc: document.getElementById('btn-pc'),
+  btnMobile: document.getElementById('btn-mobile'),
+  platformToggle: document.getElementById('platform-toggle')
 };
+
+// Current platform: 'pc' or 'mobile'
+let currentPlatform = 'pc';
+
+/**
+ * Returns the correct port for a server based on platform.
+ * Moscow is inverted: PC=9002, Mobile=9001
+ * All others: PC=9001, Mobile=9002
+ */
+function getPortForServer(server, platform) {
+  const isMoscow = server.url.includes('moscow') || server.name.toLowerCase().includes('moscow');
+  if (isMoscow) {
+    return platform === 'pc' ? 9002 : 9001;
+  }
+  return platform === 'pc' ? 9001 : 9002;
+}
+
+/** Apply current platform ports to all discovered servers and update card labels */
+function applyPlatform(platform) {
+  currentPlatform = platform;
+  discoveredServers.forEach(s => {
+    s.port = getPortForServer(s, platform);
+  });
+  // Update toggle button states
+  els.btnPc.classList.toggle('active', platform === 'pc');
+  els.btnMobile.classList.toggle('active', platform === 'mobile');
+  // Update toggle button labels
+  els.btnPc.textContent = platform === 'pc' ? 'ПК (9001)' : 'ПК';
+  els.btnMobile.textContent = platform === 'mobile' ? 'Мобильные (9002)' : 'Мобильные';
+  // Update port display on each card
+  const cards = Array.from(document.querySelectorAll('.server-card'));
+  cards.forEach((card, i) => {
+    if (!discoveredServers[i]) return;
+    const portEl = card.querySelector('.server-port');
+    if (portEl) portEl.textContent = '🔌 ' + discoveredServers[i].port;
+  });
+}
 
 function hexToBytes(hex) {
   hex = hex.replace(/\s+/g, '');
@@ -209,7 +249,7 @@ function parseLeaderboard(buffer) {
 function checkSingleServer(server, cardEl) {
   return new Promise((resolve) => {
     const { url, port, name } = server;
-    const target = `wss://${url}:9001`;
+    const target = `wss://${url}:${port}`;
     let ws;
     const startMark = performance.now();
     let ping = null;
@@ -355,8 +395,8 @@ function createServerCard(server) {
     </div>
     <div class="server-meta">
       <span>🌐 ${escapeHtml(server.url)}</span>
-      <span>🔌 ${server.port}</span>
-      
+      <span class="server-port">🔌 ${server.port}</span>
+       
     </div>
     <div class="server-body"><em>Не проверен</em></div>
     <button class="btn-check-single">Проверить</button>
@@ -378,6 +418,7 @@ function escapeHtml(s) {
 
 async function renderServers(servers) {
   discoveredServers = servers;
+  applyPlatform(currentPlatform);
   els.serversGrid.innerHTML = '';
   servers.forEach(s => {
     const card = createServerCard(s);
@@ -456,6 +497,16 @@ els.btnStart.addEventListener('click', async () => {
 
 els.btnCheckAll.addEventListener('click', () => {
   checkAllServers();
+});
+
+els.btnPc.addEventListener('click', () => {
+  if (currentPlatform === 'pc') return;
+  applyPlatform('pc');
+});
+
+els.btnMobile.addEventListener('click', () => {
+  if (currentPlatform === 'mobile') return;
+  applyPlatform('mobile');
 });
 
 // Easter: if URL has ?auto, start automatically
