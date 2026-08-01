@@ -265,6 +265,34 @@ main {
   margin-top: 28px;
   gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.platform-toggle {
+  display: inline-flex;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1.5px solid rgba(120,190,255,0.3);
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+}
+.platform-btn {
+  padding: 12px 22px;
+  border: none;
+  background: transparent;
+  color: #9ec9ee;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.platform-btn:hover { color: #d6eaff; background: rgba(120,190,255,0.1); }
+.platform-btn.active {
+  background: linear-gradient(180deg, rgba(80,160,255,0.35), rgba(30,90,160,0.45));
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 .btn-action {
   min-width: 260px;
