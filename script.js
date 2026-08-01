@@ -731,14 +731,7 @@ const ScannerUI = {
       <div class="tfc-detail">Масса: <b>${massStr}</b></div>
       <div class="tfc-detail">Пинг: <b>${pingStr}</b></div>
       <div class="tfc-detail">Метод: <b>${result.method}</b></div>
-      <div class="tfc-actions">
-        <button class="btn-observe" data-url="${escapeHtml(server.url)}" data-port="${server.port}">Наблюдать</button>
-      </div>
     `;
-    const btn = card.querySelector('.btn-observe');
-    btn.addEventListener('click', () => {
-      window.open(`https://${btn.dataset.url}:${btn.dataset.port}/`, '_blank');
-    });
     this.resultsEl.appendChild(card);
   },
   showStop() {
