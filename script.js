@@ -7,7 +7,7 @@
  *    parse server list (BE)
  *  Game servers: wss://<url>:<port>
  *    send 000E050000000000002C00000000 (original working, spec says 000A0500000000000021)
- *    await tag 6, parse from offset 6608 top3 players
+ *    await tag 6, parse from offset 6608 top10 players
  */
 
 const MASTER_URL = 'wss://master.littlebigsnake.com:8443/';
@@ -160,7 +160,7 @@ function parseLeaderboard(buffer) {
   let cur = 0;
   const players = [];
   try {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 10; i++) {
       if (cur + 3 >= slice.length) break;
       const hz0 = view.getUint8(cur); cur++;
       const pos = view.getUint8(cur); cur++;
@@ -289,7 +289,7 @@ function checkSingleServer(server, cardEl) {
       let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(ping)} ms</span></div>`;
 
       if (lb.hasData && lb.players.length) {
-        html += `<div class="leaderboard"><div class="leaderboard-title">Топ 3 игрока</div>`;
+        html += `<div class="leaderboard"><div class="leaderboard-title">Топ 10 игроков</div>`;
         lb.players.forEach(p => {
           const massStr = p.mass.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
           const big = p.mass > 1000000 ? ' 🍖' : '';
