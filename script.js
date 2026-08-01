@@ -28,7 +28,10 @@ const els = {
   btnCheckAll: document.getElementById('btn-check-all'),
   btnPc: document.getElementById('btn-pc'),
   btnMobile: document.getElementById('btn-mobile'),
-  platformToggle: document.getElementById('platform-toggle')
+  platformToggle: document.getElementById('platform-toggle'),
+  scannerPanel: document.getElementById('scanner-panel'),
+  scannerInput: document.getElementById('scanner-input'),
+  btnScan: document.getElementById('btn-scan')
 };
 
 // Current platform: 'pc' or 'mobile'
@@ -471,6 +474,287 @@ function mockServersForDemo() {
   ];
 }
 
+/* ============ PlayerScanner Module ============ */
+/**
+ * Scans all game servers in parallel batches to find a target player by accountId.
+ * Workflow:
+ *   1. Connect to each server via WebSocket (wss://<url>:<port>)
+ *   2. Send observer probe: 000E050000000000002C00000000
+ *   3. Parse tag 6 leaderboard (offset 6608), check each player.id === targetId
+ *   4. If not in top-10, keep socket open 2s listening for tick tags (0x0C / 0x08),
+ *      scan raw bytes for target ID as BE uint32
+ *   5. On match: highlight card, show server/rank/mass, "Observe" button
+ */
+const PlayerScanner = {
+  _active: false,
+  _abort: false,
+  _sockets: [],
+
+  /** Stop all scanning */
+  stop() {
+    this._abort = true;
+    this._active = false;
+    this._sockets.forEach(ws => { try { ws.close(); } catch {} });
+    this._sockets = [];
+  },
+
+  /** Main entry: scan all discovered servers for targetId */
+  async scan(targetId) {
+    if (this._active) return;
+    const id = parseInt(targetId, 10);
+    if (isNaN(id) || id <= 0) {
+      ScannerUI.status('Неверный ID игрока', 'scan-error');
+      return;
+    }
+
+    this._active = true;
+    this._abort = false;
+    this._sockets = [];
+    ScannerUI.clearResults();
+    ScannerUI.showStop();
+
+    const servers = [...discoveredServers];
+    const cards = Array.from(document.querySelectorAll('.server-card'));
+    const concurrency = 7;
+    let idx = 0;
+    let scanned = 0;
+    let foundCount = 0;
+    const total = servers.length;
+
+    ScannerUI.status(`Сканирование ${total} серверов... (ID: ${id})`, 'scan-info');
+    ScannerUI.progress(0, total);
+
+    async function worker() {
+      while (idx < servers.length && !PlayerScanner._abort) {
+        const currentIdx = idx++;
+        const server = servers[currentIdx];
+        const card = cards[currentIdx];
+        if (card) card.classList.add('scanning-target');
+
+        const result = await PlayerScanner._probeServer(server, id, card);
+
+        scanned++;
+        if (card) card.classList.remove('scanning-target');
+        ScannerUI.progress(scanned, total);
+
+        if (result.found) {
+          foundCount++;
+          ScannerUI.addResult(server, result, id);
+          if (card) card.classList.add('target-found');
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(concurrency, total) }, () => worker());
+    await Promise.all(workers);
+
+    // Clean up any remaining sockets
+    this._sockets.forEach(ws => { try { ws.close(); } catch {} });
+    this._sockets = [];
+    this._active = false;
+    ScannerUI.hideStop();
+
+    if (this._abort) {
+      ScannerUI.status(`Сканирование остановлено. Проверено ${scanned}/${total}, найдено ${foundCount}.`, 'scan-partial');
+    } else if (foundCount === 0) {
+      ScannerUI.status(`Готово! Проверено ${total} серверов. Игрок ${id} не найден.`, 'scan-error');
+    } else {
+      ScannerUI.status(`Готово! Проверено ${total} серверов. Игрок найден на ${foundCount} сервер(ах).`, 'scan-done');
+    }
+  },
+
+  /**
+   * Probe a single server for the target ID.
+   * Returns { found, server, rank, mass, name, ping, method }
+   */
+  _probeServer(server, targetId, cardEl) {
+    return new Promise((resolve) => {
+      const { url, port, name } = server;
+      const target = `wss://${url}:${port}`;
+      let ws;
+      let resolved = false;
+      let ping = null;
+      let sendTime = null;
+
+      const done = (result) => {
+        if (resolved) return;
+        resolved = true;
+        try { if (ws && ws.readyState === 1) ws.close(); } catch {}
+        resolve(result);
+      };
+
+      const timeout = setTimeout(() => {
+        done({ found: false });
+      }, 8000);
+
+      try {
+        ws = new WebSocket(target);
+      } catch {
+        clearTimeout(timeout);
+        done({ found: false });
+        return;
+      }
+      this._sockets.push(ws);
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        try {
+          ws.send(hexToBytes(GAME_CHECK_HEX_PRIMARY));
+          sendTime = performance.now();
+        } catch {
+          clearTimeout(timeout);
+          done({ found: false });
+        }
+      };
+
+      ws.onmessage = (ev) => {
+        if (!(ev.data instanceof ArrayBuffer)) return;
+        const bytes = new Uint8Array(ev.data);
+        if (bytes.length < 3) return;
+        const tag = bytes[2];
+
+        // Tag 6 = state/leaderboard
+        if (tag === 6) {
+          if (ping === null) ping = performance.now() - (sendTime || performance.now());
+          const lb = parseLeaderboard(ev.data);
+
+          // Check if target is in the leaderboard
+          if (lb.hasData) {
+            const match = lb.players.find(p => p.id === targetId);
+            if (match) {
+              clearTimeout(timeout);
+              done({
+                found: true,
+                server,
+                rank: match.rank,
+                mass: match.mass,
+                name: match.name,
+                ping: Math.round(ping),
+                method: 'leaderboard'
+              });
+              return;
+            }
+          }
+          // Not in top-10: keep listening for tick data
+          return;
+        }
+
+        // Tags 0x0C (12) / 0x08 (8) = arena ticks with entity IDs
+        if (tag === 0x0C || tag === 0x08) {
+          // Scan raw bytes for target ID as BE uint32
+          if (PlayerScanner._scanBytesForId(bytes, targetId, 3)) {
+            if (ping === null) ping = performance.now() - (sendTime || performance.now());
+            clearTimeout(timeout);
+            done({
+              found: true,
+              server,
+              rank: null,
+              mass: null,
+              name: '(в игре, вне топ-10)',
+              ping: ping ? Math.round(ping) : null,
+              method: 'tick-scan'
+            });
+            return;
+          }
+        }
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        done({ found: false });
+      };
+
+      ws.onclose = () => {
+        clearTimeout(timeout);
+        done({ found: false });
+      };
+    });
+  },
+
+  /**
+   * Scan raw byte buffer for a target ID encoded as BE uint32.
+   * Scans every 4-byte-aligned and non-aligned position from offset `start`.
+   */
+  _scanBytesForId(bytes, targetId, start = 0) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const len = bytes.length;
+    for (let i = start; i <= len - 4; i++) {
+      try {
+        if (view.getUint32(i, false) === targetId) return true;
+      } catch {}
+    }
+    return false;
+  }
+};
+
+/** Scanner UI helpers */
+const ScannerUI = {
+  statusEl: null,
+  resultsEl: null,
+  init() {
+    this.statusEl = document.getElementById('scanner-status');
+    this.resultsEl = document.getElementById('scanner-results');
+  },
+  status(msg, cls = 'scan-info') {
+    if (!this.statusEl) return;
+    this.statusEl.innerHTML = `<span class="${cls}">${msg}</span>`;
+  },
+  progress(done, total) {
+    if (!this.statusEl) return;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const existing = this.statusEl.querySelector('.scan-info, .scan-partial');
+    const msg = existing ? existing.textContent : `Сканирование... ${done}/${total}`;
+    this.statusEl.innerHTML = `<span class="scan-info">${msg}</span><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+  },
+  clearResults() {
+    if (this.resultsEl) this.resultsEl.innerHTML = '';
+    // Remove old highlights
+    document.querySelectorAll('.server-card.target-found').forEach(c => c.classList.remove('target-found'));
+  },
+  addResult(server, result, targetId) {
+    if (!this.resultsEl) return;
+    const massStr = result.mass !== null
+      ? result.mass.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+      : '?';
+    const rankStr = result.rank !== null ? `#${result.rank}` : 'вне топа';
+    const pingStr = result.ping !== null ? `${result.ping} ms` : '?';
+    const card = document.createElement('div');
+    card.className = 'target-found-card';
+    card.innerHTML = `
+      <div>
+        <div class="tfc-label">✅ Игрок найден!</div>
+        <div class="tfc-server">${escapeHtml(server.name)}</div>
+      </div>
+      <div class="tfc-detail">ID: <b>${targetId}</b></div>
+      <div class="tfc-detail">Ник: <b>${escapeHtml(result.name || '?')}</b></div>
+      <div class="tfc-detail">Позиция: <b>${rankStr}</b></div>
+      <div class="tfc-detail">Масса: <b>${massStr}</b></div>
+      <div class="tfc-detail">Пинг: <b>${pingStr}</b></div>
+      <div class="tfc-detail">Метод: <b>${result.method}</b></div>
+      <div class="tfc-actions">
+        <button class="btn-observe" data-url="${escapeHtml(server.url)}" data-port="${server.port}">Наблюдать</button>
+      </div>
+    `;
+    const btn = card.querySelector('.btn-observe');
+    btn.addEventListener('click', () => {
+      window.open(`https://${btn.dataset.url}:${btn.dataset.port}/`, '_blank');
+    });
+    this.resultsEl.appendChild(card);
+  },
+  showStop() {
+    const btn = document.getElementById('btn-scan');
+    const btnStop = document.getElementById('btn-scan-stop');
+    if (btn) btn.hidden = true;
+    if (btnStop) btnStop.hidden = false;
+  },
+  hideStop() {
+    const btn = document.getElementById('btn-scan');
+    const btnStop = document.getElementById('btn-scan-stop');
+    if (btn) btn.hidden = false;
+    if (btnStop) btnStop.hidden = true;
+  }
+};
+
 /* Event bindings */
 els.btnStart.addEventListener('click', async () => {
   els.btnStart.disabled = true;
@@ -507,6 +791,31 @@ els.btnPc.addEventListener('click', () => {
 els.btnMobile.addEventListener('click', () => {
   if (currentPlatform === 'mobile') return;
   applyPlatform('mobile');
+});
+
+// Initialize Scanner UI
+ScannerUI.init();
+
+// Scanner event bindings
+const btnScan = document.getElementById('btn-scan');
+const btnScanStop = document.getElementById('btn-scan-stop');
+const scannerInput = document.getElementById('scanner-input');
+
+btnScan.addEventListener('click', () => {
+  const id = scannerInput.value.trim();
+  if (!id) {
+    ScannerUI.status('Введите ID игрока!', 'scan-error');
+    return;
+  }
+  PlayerScanner.scan(id);
+});
+
+btnScanStop.addEventListener('click', () => {
+  PlayerScanner.stop();
+});
+
+scannerInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') btnScan.click();
 });
 
 // Easter: if URL has ?auto, start automatically
