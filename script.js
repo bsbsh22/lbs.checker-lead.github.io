@@ -258,10 +258,10 @@ function checkSingleServer(server, cardEl) {
     let ping = null;
     let finished = false;
     let collectTimer = null;
+    let playerCountCandidates = {};
     let gotTag6 = false;
     let lastLb = null;
     let lastPing = null;
-    let packetLog = [];  // Debug: log all received packets
 
     const setStatus = (state, msg) => {
       if (!cardEl) return;
@@ -391,35 +391,17 @@ function checkSingleServer(server, cardEl) {
       const bytes = new Uint8Array(ev.data);
       if (bytes.length < 3) return;
       const tag = bytes[2];
-
-      // DEBUG: логируем каждый пакет в консоль
-      const hex = bytesToHex(bytes.slice(0, 64));
-      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      // uint16 BE на смещениях 0x1C и 0x1E (place + numPlaces из ChangeMySnakeData)
-      const u16_1C = bytes.length > 0x1D ? dv.getUint16(0x1C, false) : -1;
-      const u16_1E = bytes.length > 0x1F ? dv.getUint16(0x1E, false) : -1;
-      console.log(
-        `[${name}] tag=${tag} len=${bytes.length} | hex[0..63]: ${hex}`,
-        `\n  u16@0x1C(place)=${u16_1C}  u16@0x1E(numPlaces)=${u16_1E}`,
-        bytes.length <= 80 ? bytes : ''
-      );
-
-      // Scan EVERY packet for player count candidates
-      scanForPlayerCount(bytes);
-
-      if (tag !== 6) return;
-
+      if (tag !== 6) {
+        // ignore other tags
+        return;
+      }
       if (ping === null) {
         ping = performance.now() - (server._sendTime || startMark);
       }
       const lb = parseLeaderboard(ev.data);
-      lastLb = lb;
-      lastPing = ping;
-      gotTag6 = true;
 
       const pingClass = ping < 120 ? 'fast' : ping < 300 ? 'mid' : 'slow';
       let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(ping)} ms</span></div>`;
-      html += `<div class="player-count scanning">👥 Игроков: <b>...</b></div>`;
 
       if (lb.hasData && lb.players.length) {
         html += `<div class="leaderboard"><div class="leaderboard-title">Топ 10 игроков</div>`;
@@ -444,13 +426,9 @@ function checkSingleServer(server, cardEl) {
       setStatus('online', `онлайн ${Math.round(ping)}ms`);
       updateBody(html);
       clearTimeout(overallTimeout);
-
-      // Keep socket open 3s to collect more packets for player count
-      if (collectTimer) clearTimeout(collectTimer);
-      collectTimer = setTimeout(() => {
-        updateWithPlayerCount();
-        finish({ server, ok: true, ping, players: lb.players, rawLen: bytes.length });
-      }, 3000);
+      // close after a little
+      setTimeout(() => { try{ ws.close(); }catch{} }, 300);
+      finish({ server, ok: true, ping, players: lb.players, rawLen: bytes.length });
     };
 
     ws.onerror = () => {
@@ -473,7 +451,6 @@ function checkSingleServer(server, cardEl) {
           }
           finish({ server, ok: false, error: 'closed without data' });
         } else {
-          if (gotTag6) updateWithPlayerCount();
           finish({ server, ok: true });
         }
       }
