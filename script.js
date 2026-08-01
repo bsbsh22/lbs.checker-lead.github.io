@@ -575,17 +575,20 @@ const PlayerScanner = {
       let resolved = false;
       let ping = null;
       let sendTime = null;
+      let gotTag6 = false;
+      let tickTimer = null;
 
       const done = (result) => {
         if (resolved) return;
         resolved = true;
+        if (tickTimer) clearTimeout(tickTimer);
         try { if (ws && ws.readyState === 1) ws.close(); } catch {}
         resolve(result);
       };
 
       const timeout = setTimeout(() => {
         done({ found: false });
-      }, 8000);
+      }, 10000);
 
       try {
         ws = new WebSocket(target);
@@ -616,9 +619,10 @@ const PlayerScanner = {
         // Tag 6 = state/leaderboard
         if (tag === 6) {
           if (ping === null) ping = performance.now() - (sendTime || performance.now());
+          gotTag6 = true;
           const lb = parseLeaderboard(ev.data);
 
-          // Check if target is in the leaderboard
+          // 1) Check if target is in the parsed top-10 leaderboard
           if (lb.hasData) {
             const match = lb.players.find(p => p.id === targetId);
             if (match) {
@@ -635,16 +639,38 @@ const PlayerScanner = {
               return;
             }
           }
-          // Not in top-10: keep listening for tick data
+
+          // 2) Scan the ENTIRE tag 6 buffer for target ID — there may be
+          //    more player data beyond the parsed top-10
+          if (PlayerScanner._scanBytesForId(bytes, targetId, 3)) {
+            clearTimeout(timeout);
+            done({
+              found: true,
+              server,
+              rank: null,
+              mass: null,
+              name: '(в игре, вне топ-10)',
+              ping: ping ? Math.round(ping) : null,
+              method: 'tag6-fullscan'
+            });
+            return;
+          }
+
+          // 3) Not found in tag 6: extend timeout to listen for tick packets
+          //    Reset the main timeout and set a tick-listening window of 5s
+          clearTimeout(timeout);
+          tickTimer = setTimeout(() => {
+            done({ found: false });
+          }, 5000);
           return;
         }
 
-        // Tags 0x0C (12) / 0x08 (8) = arena ticks with entity IDs
-        if (tag === 0x0C || tag === 0x08) {
-          // Scan raw bytes for target ID as BE uint32
+        // 4) After tag 6, scan ALL incoming packets for target ID
+        //    (arena ticks 0x0C/0x08, updates, entity spawns, etc.)
+        if (gotTag6) {
           if (PlayerScanner._scanBytesForId(bytes, targetId, 3)) {
             if (ping === null) ping = performance.now() - (sendTime || performance.now());
-            clearTimeout(timeout);
+            if (tickTimer) clearTimeout(tickTimer);
             done({
               found: true,
               server,
@@ -660,12 +686,10 @@ const PlayerScanner = {
       };
 
       ws.onerror = () => {
-        clearTimeout(timeout);
         done({ found: false });
       };
 
       ws.onclose = () => {
-        clearTimeout(timeout);
         done({ found: false });
       };
     });
