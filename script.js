@@ -257,6 +257,11 @@ function checkSingleServer(server, cardEl) {
     const startMark = performance.now();
     let ping = null;
     let finished = false;
+    let collectTimer = null;
+    let playerCountCandidates = {};
+    let gotTag6 = false;
+    let lastLb = null;
+    let lastPing = null;
 
     const setStatus = (state, msg) => {
       if (!cardEl) return;
@@ -278,8 +283,75 @@ function checkSingleServer(server, cardEl) {
     const finish = (result) => {
       if (finished) return;
       finished = true;
+      if (collectTimer) clearTimeout(collectTimer);
       try { if (ws && ws.readyState === 1) ws.close(); } catch {}
       resolve(result);
+    };
+
+    // Scan packet for potential player count values
+    // Based on IL2CPP reverse engineering: ChangeMySnakeData has place(uint16) + numPlaces(uint16)
+    // numPlaces = total players in arena
+    const scanForPlayerCount = (bytes) => {
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const len = bytes.length;
+      // Small packets (< 100 bytes): look for place/numPlaces pattern (high weight)
+      if (len < 100 && len > 10) {
+        // Try uint16 BE pairs: place followed by numPlaces
+        for (let i = 3; i <= len - 4; i++) {
+          const place = view.getUint16(i, false);
+          const numPlaces = view.getUint16(i + 2, false);
+          if (place >= 1 && place <= 200 && numPlaces >= 5 && numPlaces <= 200 && place <= numPlaces && numPlaces !== 10) {
+            playerCountCandidates[numPlaces] = (playerCountCandidates[numPlaces] || 0) + 5;
+          }
+        }
+        // Try varint (byte pairs): place + numPlaces as single bytes
+        for (let i = 3; i <= len - 2; i++) {
+          const place = bytes[i];
+          const numPlaces = bytes[i + 1];
+          if (place >= 1 && place <= 127 && numPlaces >= 5 && numPlaces <= 127 && place <= numPlaces && numPlaces !== 10) {
+            playerCountCandidates[numPlaces] = (playerCountCandidates[numPlaces] || 0) + 3;
+          }
+        }
+      }
+      // All packets: scan uint16 BE in typical player count range (low weight)
+      for (let i = 3; i <= len - 2; i++) {
+        const val = view.getUint16(i, false);
+        if (val >= 15 && val <= 80 && val !== 10) {
+          playerCountCandidates[val] = (playerCountCandidates[val] || 0) + 1;
+        }
+      }
+    };
+
+    // Rebuild card body with player count
+    const updateWithPlayerCount = () => {
+      const sorted = Object.entries(playerCountCandidates).sort((a, b) => b[1] - a[1]);
+      const pc = sorted.length > 0 && sorted[0][1] >= 2 ? parseInt(sorted[0][0]) : null;
+      if (!lastLb || lastPing === null) return;
+      const pingClass = lastPing < 120 ? 'fast' : lastPing < 300 ? 'mid' : 'slow';
+      let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(lastPing)} ms</span></div>`;
+      if (pc !== null) {
+        html += `<div class="player-count">👥 Игроков: <b>${pc}</b></div>`;
+      }
+      if (lastLb.hasData && lastLb.players.length) {
+        html += `<div class="leaderboard"><div class="leaderboard-title">Топ 10 игроков</div>`;
+        lastLb.players.forEach(p => {
+          const massStr = p.mass.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+          const big = p.mass > 1000000 ? ' 🍖' : '';
+          html += `<div class="player-row">
+            <div class="player-pos">${p.rank}</div>
+            <div class="player-name" title="${p.name} (${p.id})">${p.name}</div>
+            <div class="player-mass">${massStr}${big}</div>
+            <div class="player-extra ${p.badgeClass}">${p.badge || ''}</div>
+          </div>`;
+        });
+        html += `</div>`;
+        if (lastLb.players.some(x=>x.mass>1000000)) {
+          html += `<div style="margin-top:6px;color:#8eff8e;font-size:11px;">⚡ Обнаружен большой змей >1M!</div>`;
+        }
+      } else {
+        html += `<div class="raw-dump">${lastLb.note || 'Нет данных топа'}</div>`;
+      }
+      updateBody(html);
     };
 
     const overallTimeout = setTimeout(() => {
@@ -319,17 +391,23 @@ function checkSingleServer(server, cardEl) {
       const bytes = new Uint8Array(ev.data);
       if (bytes.length < 3) return;
       const tag = bytes[2];
-      if (tag !== 6) {
-        // ignore other tags
-        return;
-      }
+
+      // Scan EVERY packet for player count candidates
+      scanForPlayerCount(bytes);
+
+      if (tag !== 6) return;
+
       if (ping === null) {
         ping = performance.now() - (server._sendTime || startMark);
       }
       const lb = parseLeaderboard(ev.data);
+      lastLb = lb;
+      lastPing = ping;
+      gotTag6 = true;
 
       const pingClass = ping < 120 ? 'fast' : ping < 300 ? 'mid' : 'slow';
       let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(ping)} ms</span></div>`;
+      html += `<div class="player-count scanning">👥 Игроков: <b>...</b></div>`;
 
       if (lb.hasData && lb.players.length) {
         html += `<div class="leaderboard"><div class="leaderboard-title">Топ 10 игроков</div>`;
@@ -354,9 +432,13 @@ function checkSingleServer(server, cardEl) {
       setStatus('online', `онлайн ${Math.round(ping)}ms`);
       updateBody(html);
       clearTimeout(overallTimeout);
-      // close after a little
-      setTimeout(() => { try{ ws.close(); }catch{} }, 300);
-      finish({ server, ok: true, ping, players: lb.players, rawLen: bytes.length });
+
+      // Keep socket open 3s to collect more packets for player count
+      if (collectTimer) clearTimeout(collectTimer);
+      collectTimer = setTimeout(() => {
+        updateWithPlayerCount();
+        finish({ server, ok: true, ping, players: lb.players, rawLen: bytes.length });
+      }, 3000);
     };
 
     ws.onerror = () => {
@@ -379,6 +461,7 @@ function checkSingleServer(server, cardEl) {
           }
           finish({ server, ok: false, error: 'closed without data' });
         } else {
+          if (gotTag6) updateWithPlayerCount();
           finish({ server, ok: true });
         }
       }
