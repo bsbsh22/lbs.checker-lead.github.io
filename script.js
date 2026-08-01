@@ -258,10 +258,10 @@ function checkSingleServer(server, cardEl) {
     let ping = null;
     let finished = false;
     let collectTimer = null;
-    let playerCountCandidates = {};
     let gotTag6 = false;
     let lastLb = null;
     let lastPing = null;
+    let packetLog = [];  // Debug: log all received packets
 
     const setStatus = (state, msg) => {
       if (!cardEl) return;
@@ -391,6 +391,18 @@ function checkSingleServer(server, cardEl) {
       const bytes = new Uint8Array(ev.data);
       if (bytes.length < 3) return;
       const tag = bytes[2];
+
+      // DEBUG: логируем каждый пакет в консоль
+      const hex = bytesToHex(bytes.slice(0, 64));
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      // uint16 BE на смещениях 0x1C и 0x1E (place + numPlaces из ChangeMySnakeData)
+      const u16_1C = bytes.length > 0x1D ? dv.getUint16(0x1C, false) : -1;
+      const u16_1E = bytes.length > 0x1F ? dv.getUint16(0x1E, false) : -1;
+      console.log(
+        `[${name}] tag=${tag} len=${bytes.length} | hex[0..63]: ${hex}`,
+        `\n  u16@0x1C(place)=${u16_1C}  u16@0x1E(numPlaces)=${u16_1E}`,
+        bytes.length <= 80 ? bytes : ''
+      );
 
       // Scan EVERY packet for player count candidates
       scanForPlayerCount(bytes);
