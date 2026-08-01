@@ -259,6 +259,27 @@ main {
 .btn-check-single:hover { background: linear-gradient(180deg, rgba(100,180,255,0.32), rgba(50,110,190,0.4)); color: #fff; transform: translateY(-1px); }
 .btn-check-single:disabled { opacity: 0.5; pointer-events: none; }
 
+/* Player Count display */
+.player-count {
+  margin: 6px 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffd86e;
+  background: rgba(0,0,0,0.25);
+  border-radius: 8px;
+  padding: 5px 10px;
+  border: 1px solid rgba(255,216,110,0.2);
+  display: inline-block;
+}
+.player-count.scanning {
+  color: #9ec9ee;
+  animation: pcPulse 1s ease-in-out infinite;
+}
+@keyframes pcPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 .actions {
   display: flex;
   justify-content: center;
