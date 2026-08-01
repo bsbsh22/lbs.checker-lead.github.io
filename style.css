@@ -343,3 +343,187 @@ main {
   .btn-start { width: 300px; height: 118px; font-size: 28px; }
   .server-card { padding: 12px 12px; }
 }
+
+/* ============ Player Scanner ============ */
+.scanner-panel {
+  margin-top: 22px;
+  background: linear-gradient(180deg, rgba(30,80,130,0.55) 0%, rgba(15,45,85,0.65) 100%);
+  border: 1.5px solid rgba(120,190,255,0.25);
+  border-radius: 16px;
+  padding: 16px 18px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.scanner-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.scanner-icon { font-size: 22px; }
+.scanner-title {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+.scanner-input-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.scanner-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(120,190,255,0.25);
+  background: rgba(0,0,0,0.35);
+  color: #e6f2ff;
+  font-size: 14px;
+  font-family: 'Segoe UI', monospace;
+  outline: none;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.scanner-input::placeholder { color: #6a8fb0; }
+.scanner-input:focus {
+  border-color: rgba(120,190,255,0.55);
+  box-shadow: 0 0 0 3px rgba(80,160,255,0.15);
+}
+.btn-scan {
+  padding: 12px 28px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255,180,60,0.4);
+  background: linear-gradient(180deg, #f0a020 0%, #d48010 50%, #a86000 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+  transition: transform 0.12s, filter 0.15s;
+}
+.btn-scan:hover { transform: translateY(-2px); filter: brightness(1.08); }
+.btn-scan:active { transform: translateY(0) scale(0.97); }
+.btn-scan:disabled { opacity: 0.5; pointer-events: none; }
+.btn-scan-stop {
+  padding: 12px 28px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255,80,80,0.45);
+  background: linear-gradient(180deg, #e04040 0%, #b02020 50%, #801010 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+  transition: transform 0.12s, filter 0.15s;
+}
+.btn-scan-stop:hover { transform: translateY(-2px); filter: brightness(1.08); }
+.btn-scan-stop:active { transform: translateY(0) scale(0.97); }
+
+.scanner-status {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 18px;
+}
+.scanner-status .progress-bar {
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.35);
+  overflow: hidden;
+}
+.scanner-status .progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f0a020, #ffd060);
+  transition: width 0.3s ease;
+}
+.scanner-status .scan-info { color: #a8d8ff; }
+.scanner-status .scan-done { color: #8eff8e; }
+.scanner-status .scan-error { color: #ffb1b1; }
+.scanner-status .scan-partial { color: #ffe27a; }
+
+.scanner-results {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.target-found-card {
+  background: linear-gradient(180deg, rgba(60,140,60,0.55) 0%, rgba(30,80,30,0.65) 100%);
+  border: 2px solid rgba(110,255,110,0.55);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  box-shadow: 0 0 24px rgba(110,255,110,0.25), 0 8px 24px rgba(0,0,0,0.3);
+  animation: targetPulse 1.8s ease-in-out infinite;
+}
+@keyframes targetPulse {
+  0%, 100% { box-shadow: 0 0 24px rgba(110,255,110,0.25), 0 8px 24px rgba(0,0,0,0.3); }
+  50% { box-shadow: 0 0 40px rgba(110,255,110,0.5), 0 8px 24px rgba(0,0,0,0.3); }
+}
+.target-found-card .tfc-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #8eff8e;
+  font-weight: 700;
+}
+.target-found-card .tfc-server {
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+.target-found-card .tfc-detail {
+  font-size: 13px;
+  color: #d6eaff;
+}
+.target-found-card .tfc-detail b { color: #ffd86e; }
+.target-found-card .tfc-actions { margin-left: auto; }
+.btn-observe {
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(110,255,110,0.5);
+  background: linear-gradient(180deg, #4ec020 0%, #2e8010 100%);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  transition: transform 0.12s, filter 0.15s;
+}
+.btn-observe:hover { transform: translateY(-1px); filter: brightness(1.1); }
+.btn-observe:active { transform: translateY(0) scale(0.96); }
+
+/* Highlight server card when target is found on it */
+.server-card.target-found {
+  border-color: rgba(110,255,110,0.7) !important;
+  box-shadow: 0 0 30px rgba(110,255,110,0.45), 0 8px 24px rgba(0,0,0,0.35) !important;
+  animation: cardTargetPulse 1.8s ease-in-out infinite;
+}
+.server-card.target-found::before {
+  background: linear-gradient(90deg, #6cff51, #ffd060, #6cff51) !important;
+  height: 4px !important;
+}
+@keyframes cardTargetPulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(110,255,110,0.45), 0 8px 24px rgba(0,0,0,0.35); }
+  50% { box-shadow: 0 0 50px rgba(110,255,110,0.7), 0 8px 24px rgba(0,0,0,0.35); }
+}
+.server-card.scanning-target {
+  border-color: rgba(255,180,60,0.55) !important;
+}
+.server-card.scanning-target::before {
+  background: linear-gradient(90deg, #f0a020, #ffd060, #f0a020) !important;
+}
