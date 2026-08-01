@@ -10,7 +10,7 @@
 </head>
 <body>
   <header>
-    <img src="assets/mobile-header-logo.png" alt="LITTLE BIG SNAKE" id="logo"><br><br><br>by Hārd_RØCK (orig).
+    <img src="assets/mobile-header-logo.png" alt="LITTLE BIG SNAKE" id="logo"><br><br><br>by Hārd_RØCK
   </header>
 
   <main>
@@ -27,7 +27,24 @@
           <button id="btn-mobile" class="platform-btn">Мобильные (9002)</button>
         </div>
         <button id="btn-check-all" class="btn-action">проверить все сервера</button>
-      </div><div id="servers" class="servers-grid"></div>
+      </div>
+
+      <!-- Player Scanner Panel -->
+      <div id="scanner-panel" class="scanner-panel">
+        <div class="scanner-header">
+          <span class="scanner-icon">🎯</span>
+          <span class="scanner-title">Поиск игрока</span>
+        </div>
+        <div class="scanner-input-row">
+          <input type="text" id="scanner-input" class="scanner-input" placeholder="Введите ID игрока (accountId)..." />
+          <button id="btn-scan" class="btn-scan">НАЙТИ</button>
+          <button id="btn-scan-stop" class="btn-scan-stop" hidden>СТОП</button>
+        </div>
+        <div id="scanner-status" class="scanner-status"></div>
+        <div id="scanner-results" class="scanner-results"></div>
+      </div>
+
+      <div id="servers" class="servers-grid"></div>
 
     </div>
   </main>
