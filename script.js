@@ -392,17 +392,49 @@ function checkSingleServer(server, cardEl) {
       if (bytes.length < 3) return;
       const tag = bytes[2];
       if (tag !== 6) {
-        // ignore other tags
+        // игнорируем другие теги
         return;
       }
       if (ping === null) {
         ping = performance.now() - (server._sendTime || startMark);
       }
       const lb = parseLeaderboard(ev.data);
-
+      // --- Извлекаем numPlayers из структуры ArenaEndGameData ---
+      // По C# коду: ushort numPlaces (0x58), ushort numPlayers (0x5A)
+      // Они идут строго друг за другом. Заголовок пакета = 3 байта.
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let numPlayers = null;
+      // 1. Пытаемся прочитать по точному смещению (3 байта заголовка + 0x58)
+      if (bytes.length >= 95) { // 3 + 0x5A + 2 = 95
+        const numPlacesExact = view.getUint16(3 + 0x58, false);
+        const numPlayersExact = view.getUint16(3 + 0x5A, false);
+        if (numPlacesExact >= 5 && numPlacesExact <= 200 &&
+            numPlayersExact >= 5 && numPlayersExact <= 200 &&
+            numPlayersExact <= numPlacesExact) {
+          numPlayers = numPlayersExact;
+        }
+      }
+      // 2. Если точное смещение не подошло (например, есть доп. заголовок),
+      // ищем паттерн двух подряд идущих ushort (numPlaces + numPlayers)
+      if (numPlayers === null) {
+        for (let i = 3; i <= bytes.length - 4; i++) {
+          const numPlaces = view.getUint16(i, false);
+          const np = view.getUint16(i + 2, false);
+          if (numPlaces >= 5 && numPlaces <= 200 &&
+              np >= 5 && np <= 200 &&
+              np <= numPlaces) {
+            numPlayers = np;
+            break;
+          }
+        }
+      }
+      // Формируем вывод
       const pingClass = ping < 120 ? 'fast' : ping < 300 ? 'mid' : 'slow';
       let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(ping)} ms</span></div>`;
-
+      // Добавляем количество игроков в карточку
+      if (numPlayers !== null) {
+        html += `<div class="player-count">👥 Игроков: <b>${numPlayers}</b></div>`;
+      }
       if (lb.hasData && lb.players.length) {
         html += `<div class="leaderboard"><div class="leaderboard-title">Топ 10 игроков</div>`;
         lb.players.forEach(p => {
@@ -422,11 +454,14 @@ function checkSingleServer(server, cardEl) {
       } else {
         html += `<div class="raw-dump">${lb.note || 'Нет данных топа'}<br>Дамп начала: ${bytesToHex(bytes.slice(0, 48))}...</div>`;
       }
-
-      setStatus('online', `онлайн ${Math.round(ping)}ms`);
+      // Заменяем бейдж "онлайн Xms" на количество игроков, если оно найдено
+      const badgeText = numPlayers !== null
+        ? `онлайн (${numPlayers} игр.)`
+        : `онлайн ${Math.round(ping)}ms`;
+      setStatus('online', badgeText);
       updateBody(html);
       clearTimeout(overallTimeout);
-      // close after a little
+      // закрываем соединение
       setTimeout(() => { try{ ws.close(); }catch{} }, 300);
       finish({ server, ok: true, ping, players: lb.players, rawLen: bytes.length });
     };
