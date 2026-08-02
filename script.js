@@ -291,24 +291,34 @@ function checkSingleServer(server, cardEl) {
     // Scan packet for potential player count values
     // Based on IL2CPP reverse engineering: ChangeMySnakeData has place(uint16) + numPlaces(uint16)
     // numPlaces = total players in arena
-    // Точечный поиск по структуре ChangeMySnakeData (place + numPlaces)
-    const scanForPlayerCount = (bytes) => {
-      if (bytes.length < 10) return;
+    /**
+     * Сканирует бинарный пакет tag 6 на наличие реального количества игроков на арене.
+     * В протоколе C# (ChangeMySnakeData) поля хранятся как:
+     *   ushort place (текущее место змейки)
+     *   ushort numPlaces (всего мест/игроков на арене)
+     */
+    const extractOnlineFromPacket = (bytes) => {
+      if (bytes.length < 10) return null;
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      // Проходим по байтам с шагом 2 (ushort выравнивание)
-      for (let i = 3; i <= bytes.length - 4; i++) {
-        // В C# ushort place идет по смещению 0x2C, a numPlaces по 0x2E (разница 2 байта)
-        const place = view.getUint16(i, false); // Big-Endian
-        const numPlaces = view.getUint16(i + 2, false);
-        // Реалистичный фильтр для игры LittleBigSnake:
-        // 1. Место не может быть 0
-        // 2. Игроков на сервере обычно от 5 до 250
-        // 3. Текущее место не может быть больше общего числа игроков
-        if (place >= 1 && place <= 250 && numPlaces >= place && numPlaces <= 250 && numPlaces !== 10) {
-          playerCountCandidates[numPlaces] = (playerCountCandidates[numPlaces] || 0) + 10; // Высокий приоритет!
-          break;
+      const candidates = {};
+      // Проходим по байтам пакета с шагом 2
+      for (let i = 3; i <= bytes.length - 4; i += 2) {
+        const place = view.getUint16(i, false); // Big-Endian ushort (место)
+        const numPlaces = view.getUint16(i + 2, false); // Big-Endian ushort (всего игроков)
+        // Валидация значений, характерных для LBS:
+        // 1. Место от 1 до 300
+        // 2. Общий онлайн на арене от place до 300
+        // 3. Отсеиваем значения 10 (часто совпадает с размером лидерборда)
+        if (place >= 1 && place <= 300 && numPlaces >= place && numPlaces <= 300 && numPlaces !== 10) {
+          candidates[numPlaces] = (candidates[numPlaces] || 0) + 1;
         }
       }
+      // Находим самое частовстречаемое значение
+      const sorted = Object.entries(candidates).sort((a, b) => b[1] - a[1]);
+      if (sorted.length > 0) {
+        return parseInt(sorted[0][0], 10);
+      }
+      return null;
     };
 
     // Rebuild card body with player count
@@ -380,58 +390,27 @@ function checkSingleServer(server, cardEl) {
       const bytes = new Uint8Array(ev.data);
       if (bytes.length < 3) return;
       const tag = bytes[2];
-      if (tag !== 6) return; // Игнорируем другие теги
+      if (tag !== 6) return; // Нас интересует только пакет состояния (tag 6)
       if (ping === null) {
         ping = performance.now() - (server._sendTime || startMark);
       }
-
-      // --- ДЕБАГ: полный hex-дамп пакета tag 6 для поиска смещения numPlaces ---
-      const hexFull = bytesToHex(bytes);
-      // Разбиваем по 2 символа (1 байт) для читаемости
-      const hexBytes = Array.from(bytes).map(b => b.toString(16).padStart(2, '0'));
-      // Группируем по 16 байт в строке
-      const hexDump = [];
-      for (let i = 0; i < hexBytes.length; i += 16) {
-        const chunk = hexBytes.slice(i, i + 16).join(' ');
-        const offset = i.toString(16).padStart(4, '0');
-        hexDump.push(`${offset}: ${chunk}`);
-      }
-      console.log(`%c[DEBUG tag6] ${server.name} | len=${bytes.length} | ping=${Math.round(ping)}ms`, 'color:#00ff00;font-weight:bold');
-      console.log(hexDump.join('\n'));
-      // Дополнительно: выводим все uint16 BE в диапазоне 5-250 с их смещениями
-      const view2 = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      const uint16s = [];
-      for (let i = 0; i <= bytes.length - 2; i++) {
-        const v = view2.getUint16(i, false);
-        if (v >= 5 && v <= 250) {
-          uint16s.push(`off=0x${i.toString(16)} (${i}) val=${v}`);
-        }
-      }
-      console.log(`%c[DEBUG tag6] uint16 (5-250) candidates:`, 'color:#00ffff');
-      console.log(uint16s.join(' | '));
-      // -----------------------------------------------------------------
-
-      // 1. Парсим лидерборд (топ-10)
+      // 1. Извлекаем лидерборд (топ-10)
       const lb = parseLeaderboard(ev.data);
       lastLb = lb;
       lastPing = ping;
-      // 2. Сканируем пакет на наличие реального онлайна (numPlaces / numPlayers)
-      scanForPlayerCount(bytes);
-      // 3. Вычисляем наиболее вероятный онлайн арены
-      const sortedCandidates = Object.entries(playerCountCandidates).sort((a, b) => b[1] - a[1]);
-      // Если нашли кандидат с весом >= 2, берем его.
-      // Иначе, fallback: если кандидатов нет, не показываем завышенные/неверные значения.
-      let onlinePlayers = null;
-      if (sortedCandidates.length > 0 && sortedCandidates[0][1] >= 2) {
-        onlinePlayers = parseInt(sortedCandidates[0][0], 10);
-      }
-      // 4. Формируем HTML карточки
+      // 2. Извлекаем РЕАЛЬНЫЙ онлайн арены из структуры пакета
+      const onlinePlayers = extractOnlineFromPacket(bytes);
+      // 3. Формируем UI карточки
       const pingClass = ping < 120 ? 'fast' : ping < 300 ? 'mid' : 'slow';
       let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(ping)} ms</span></div>`;
       if (onlinePlayers !== null) {
-        html += `<div class="player-count">👥 Игроков на арене: <b>${onlinePlayers}</b></div>`;
+        html += `<div class="player-count" style="font-size: 14px; font-weight: bold; color: #4caf50; margin: 4px 0;">
+          👥 Игроков на сервере: <b>${onlinePlayers}</b>
+        </div>`;
       } else {
-        html += `<div class="player-count" style="opacity:0.7">👥 В топе: <b>${lb.players.length}</b></div>`;
+        html += `<div class="player-count" style="opacity: 0.7;">
+          👥 Игроков в топе: <b>${lb.players.length}</b>
+        </div>`;
       }
       if (lb.hasData && lb.players.length) {
         html += `<div class="leaderboard"><div class="leaderboard-title">Топ 10 игроков</div>`;
@@ -447,12 +426,12 @@ function checkSingleServer(server, cardEl) {
         });
         html += `</div>`;
         if (lb.players.some(x => x.mass > 1000000)) {
-          html += `<div style="margin-top:6px;color:#8eff8e;font-size:11px;">⚡ Обнаружен большой змей >1M!</div>`;
+          html += `<div style="margin-top:6px;color:#8eff8e;font-size:11px;">⚡ Обнаружен гигант >1M!</div>`;
         }
       } else {
         html += `<div class="raw-dump">${lb.note || 'Нет данных топа'}</div>`;
       }
-      // 5. Обновляем статус и бейдж
+      // 4. Обновляем статус карточки
       const badgeText = onlinePlayers !== null
         ? `онлайн (${onlinePlayers} игрок.)`
         : `онлайн ${Math.round(ping)}ms`;
@@ -460,7 +439,7 @@ function checkSingleServer(server, cardEl) {
       updateBody(html);
       clearTimeout(overallTimeout);
       setTimeout(() => { try { ws.close(); } catch {} }, 300);
-      finish({ server, ok: true, ping, players: lb.players, rawLen: bytes.length });
+      finish({ server, ok: true, ping, players: lb.players, online: onlinePlayers, rawLen: bytes.length });
     };
 
     ws.onerror = () => {
