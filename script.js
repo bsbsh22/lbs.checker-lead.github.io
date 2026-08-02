@@ -291,33 +291,22 @@ function checkSingleServer(server, cardEl) {
     // Scan packet for potential player count values
     // Based on IL2CPP reverse engineering: ChangeMySnakeData has place(uint16) + numPlaces(uint16)
     // numPlaces = total players in arena
+    // Точечный поиск по структуре ChangeMySnakeData (place + numPlaces)
     const scanForPlayerCount = (bytes) => {
+      if (bytes.length < 10) return;
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      const len = bytes.length;
-      // Small packets (< 100 bytes): look for place/numPlaces pattern (high weight)
-      if (len < 100 && len > 10) {
-        // Try uint16 BE pairs: place followed by numPlaces
-        for (let i = 3; i <= len - 4; i++) {
-          const place = view.getUint16(i, false);
-          const numPlaces = view.getUint16(i + 2, false);
-          if (place >= 1 && place <= 200 && numPlaces >= 5 && numPlaces <= 200 && place <= numPlaces && numPlaces !== 10) {
-            playerCountCandidates[numPlaces] = (playerCountCandidates[numPlaces] || 0) + 5;
-          }
-        }
-        // Try varint (byte pairs): place + numPlaces as single bytes
-        for (let i = 3; i <= len - 2; i++) {
-          const place = bytes[i];
-          const numPlaces = bytes[i + 1];
-          if (place >= 1 && place <= 127 && numPlaces >= 5 && numPlaces <= 127 && place <= numPlaces && numPlaces !== 10) {
-            playerCountCandidates[numPlaces] = (playerCountCandidates[numPlaces] || 0) + 3;
-          }
-        }
-      }
-      // All packets: scan uint16 BE in typical player count range (low weight)
-      for (let i = 3; i <= len - 2; i++) {
-        const val = view.getUint16(i, false);
-        if (val >= 15 && val <= 80 && val !== 10) {
-          playerCountCandidates[val] = (playerCountCandidates[val] || 0) + 1;
+      // Проходим по байтам с шагом 2 (ushort выравнивание)
+      for (let i = 3; i <= bytes.length - 4; i++) {
+        // В C# ushort place идет по смещению 0x2C, a numPlaces по 0x2E (разница 2 байта)
+        const place = view.getUint16(i, false); // Big-Endian
+        const numPlaces = view.getUint16(i + 2, false);
+        // Реалистичный фильтр для игры LittleBigSnake:
+        // 1. Место не может быть 0
+        // 2. Игроков на сервере обычно от 5 до 250
+        // 3. Текущее место не может быть больше общего числа игроков
+        if (place >= 1 && place <= 250 && numPlaces >= place && numPlaces <= 250 && numPlaces !== 10) {
+          playerCountCandidates[numPlaces] = (playerCountCandidates[numPlaces] || 0) + 10; // Высокий приоритет!
+          break;
         }
       }
     };
