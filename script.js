@@ -391,49 +391,31 @@ function checkSingleServer(server, cardEl) {
       const bytes = new Uint8Array(ev.data);
       if (bytes.length < 3) return;
       const tag = bytes[2];
-      if (tag !== 6) {
-        // игнорируем другие теги
-        return;
-      }
+      if (tag !== 6) return; // Игнорируем другие теги
       if (ping === null) {
         ping = performance.now() - (server._sendTime || startMark);
       }
+      // 1. Парсим лидерборд (топ-10)
       const lb = parseLeaderboard(ev.data);
-      // --- Извлекаем numPlayers из структуры ArenaEndGameData ---
-      // По C# коду: ushort numPlaces (0x58), ushort numPlayers (0x5A)
-      // Они идут строго друг за другом. Заголовок пакета = 3 байта.
-      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      let numPlayers = null;
-      // 1. Пытаемся прочитать по точному смещению (3 байта заголовка + 0x58)
-      if (bytes.length >= 95) { // 3 + 0x5A + 2 = 95
-        const numPlacesExact = view.getUint16(3 + 0x58, false);
-        const numPlayersExact = view.getUint16(3 + 0x5A, false);
-        if (numPlacesExact >= 5 && numPlacesExact <= 200 &&
-            numPlayersExact >= 5 && numPlayersExact <= 200 &&
-            numPlayersExact <= numPlacesExact) {
-          numPlayers = numPlayersExact;
-        }
+      lastLb = lb;
+      lastPing = ping;
+      // 2. Сканируем пакет на наличие реального онлайна (numPlaces / numPlayers)
+      scanForPlayerCount(bytes);
+      // 3. Вычисляем наиболее вероятный онлайн арены
+      const sortedCandidates = Object.entries(playerCountCandidates).sort((a, b) => b[1] - a[1]);
+      // Если нашли кандидат с весом >= 2, берем его.
+      // Иначе, fallback: если кандидатов нет, не показываем завышенные/неверные значения.
+      let onlinePlayers = null;
+      if (sortedCandidates.length > 0 && sortedCandidates[0][1] >= 2) {
+        onlinePlayers = parseInt(sortedCandidates[0][0], 10);
       }
-      // 2. Если точное смещение не подошло (например, есть доп. заголовок),
-      // ищем паттерн двух подряд идущих ushort (numPlaces + numPlayers)
-      if (numPlayers === null) {
-        for (let i = 3; i <= bytes.length - 4; i++) {
-          const numPlaces = view.getUint16(i, false);
-          const np = view.getUint16(i + 2, false);
-          if (numPlaces >= 5 && numPlaces <= 200 &&
-              np >= 5 && np <= 200 &&
-              np <= numPlaces) {
-            numPlayers = np;
-            break;
-          }
-        }
-      }
-      // Формируем вывод
+      // 4. Формируем HTML карточки
       const pingClass = ping < 120 ? 'fast' : ping < 300 ? 'mid' : 'slow';
       let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(ping)} ms</span></div>`;
-      // Добавляем количество игроков в карточку
-      if (numPlayers !== null) {
-        html += `<div class="player-count">👥 Игроков: <b>${numPlayers}</b></div>`;
+      if (onlinePlayers !== null) {
+        html += `<div class="player-count">👥 Игроков на арене: <b>${onlinePlayers}</b></div>`;
+      } else {
+        html += `<div class="player-count" style="opacity:0.7">👥 В топе: <b>${lb.players.length}</b></div>`;
       }
       if (lb.hasData && lb.players.length) {
         html += `<div class="leaderboard"><div class="leaderboard-title">Топ 10 игроков</div>`;
@@ -448,21 +430,20 @@ function checkSingleServer(server, cardEl) {
           </div>`;
         });
         html += `</div>`;
-        if (lb.players.some(x=>x.mass>1000000)) {
+        if (lb.players.some(x => x.mass > 1000000)) {
           html += `<div style="margin-top:6px;color:#8eff8e;font-size:11px;">⚡ Обнаружен большой змей >1M!</div>`;
         }
       } else {
-        html += `<div class="raw-dump">${lb.note || 'Нет данных топа'}<br>Дамп начала: ${bytesToHex(bytes.slice(0, 48))}...</div>`;
+        html += `<div class="raw-dump">${lb.note || 'Нет данных топа'}</div>`;
       }
-      // Заменяем бейдж "онлайн Xms" на количество игроков, если оно найдено
-      const badgeText = numPlayers !== null
-        ? `онлайн (${numPlayers} ms)`
+      // 5. Обновляем статус и бейдж
+      const badgeText = onlinePlayers !== null
+        ? `онлайн (${onlinePlayers} игрок.)`
         : `онлайн ${Math.round(ping)}ms`;
       setStatus('online', badgeText);
       updateBody(html);
       clearTimeout(overallTimeout);
-      // закрываем соединение
-      setTimeout(() => { try{ ws.close(); }catch{} }, 300);
+      setTimeout(() => { try { ws.close(); } catch {} }, 300);
       finish({ server, ok: true, ping, players: lb.players, rawLen: bytes.length });
     };
 
