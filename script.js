@@ -456,7 +456,7 @@ function checkSingleServer(server, cardEl) {
       }
       // Заменяем бейдж "онлайн Xms" на количество игроков, если оно найдено
       const badgeText = numPlayers !== null
-        ? `онлайн (${numPlayers} игр.)`
+        ? `онлайн (${numPlayers} ms)`
         : `онлайн ${Math.round(ping)}ms`;
       setStatus('online', badgeText);
       updateBody(html);
