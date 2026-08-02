@@ -384,6 +384,33 @@ function checkSingleServer(server, cardEl) {
       if (ping === null) {
         ping = performance.now() - (server._sendTime || startMark);
       }
+
+      // --- ДЕБАГ: полный hex-дамп пакета tag 6 для поиска смещения numPlaces ---
+      const hexFull = bytesToHex(bytes);
+      // Разбиваем по 2 символа (1 байт) для читаемости
+      const hexBytes = Array.from(bytes).map(b => b.toString(16).padStart(2, '0'));
+      // Группируем по 16 байт в строке
+      const hexDump = [];
+      for (let i = 0; i < hexBytes.length; i += 16) {
+        const chunk = hexBytes.slice(i, i + 16).join(' ');
+        const offset = i.toString(16).padStart(4, '0');
+        hexDump.push(`${offset}: ${chunk}`);
+      }
+      console.log(`%c[DEBUG tag6] ${server.name} | len=${bytes.length} | ping=${Math.round(ping)}ms`, 'color:#00ff00;font-weight:bold');
+      console.log(hexDump.join('\n'));
+      // Дополнительно: выводим все uint16 BE в диапазоне 5-250 с их смещениями
+      const view2 = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const uint16s = [];
+      for (let i = 0; i <= bytes.length - 2; i++) {
+        const v = view2.getUint16(i, false);
+        if (v >= 5 && v <= 250) {
+          uint16s.push(`off=0x${i.toString(16)} (${i}) val=${v}`);
+        }
+      }
+      console.log(`%c[DEBUG tag6] uint16 (5-250) candidates:`, 'color:#00ffff');
+      console.log(uint16s.join(' | '));
+      // -----------------------------------------------------------------
+
       // 1. Парсим лидерборд (топ-10)
       const lb = parseLeaderboard(ev.data);
       lastLb = lb;
