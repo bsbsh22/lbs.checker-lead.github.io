@@ -18,6 +18,11 @@ const MASTER_MESSAGES_HEX = [
 // For game server - protocol tag 5 request
 const GAME_CHECK_HEX_PRIMARY = "000E050000000000002C00000000"; // from C# working code
 const GAME_CHECK_HEX_FALLBACK = "000A0500000000000021"; // from task description
+// Прямое чтение количества игроков из пакета состояния арены.
+// По dump.cs (ArenaEndGameData): ushort numPlaces // 0x58, ushort numPlayers // 0x5A
+const NUMPLACES_OFFSET = 0x58;  // numPlaces: всего мест/игроков на арене
+const NUMPLAYERS_OFFSET = 0x5A; // numPlayers: игроков на арене
+const VALID_NUMPLACES_MAX = 10000;
 
 const els = {
   btnStart: document.getElementById('btn-start'),
@@ -257,11 +262,6 @@ function checkSingleServer(server, cardEl) {
     const startMark = performance.now();
     let ping = null;
     let finished = false;
-    let collectTimer = null;
-    let playerCountCandidates = {};
-    let gotTag6 = false;
-    let lastLb = null;
-    let lastPing = null;
 
     const setStatus = (state, msg) => {
       if (!cardEl) return;
@@ -283,74 +283,24 @@ function checkSingleServer(server, cardEl) {
     const finish = (result) => {
       if (finished) return;
       finished = true;
-      if (collectTimer) clearTimeout(collectTimer);
       try { if (ws && ws.readyState === 1) ws.close(); } catch {}
       resolve(result);
     };
 
-    // Scan packet for potential player count values
-    // Based on IL2CPP reverse engineering: ChangeMySnakeData has place(uint16) + numPlaces(uint16)
-    // numPlaces = total players in arena
     /**
-     * Сканирует бинарный пакет tag 6 на наличие реального количества игроков на арене.
-     * В протоколе C# (ChangeMySnakeData) поля хранятся как:
-     *   ushort place (текущее место змейки)
-     *   ushort numPlaces (всего мест/игроков на арене)
+     * Читает реальное количество игроков на арене напрямую из пакета tag 6.
+     * В структуре NetData из dump.cs (ArenaEndGameData) поле numPlaces
+     * расположено по смещению 0x58 (ushort, Big-Endian) — это и есть
+     * общее число мест/игроков на арене в данный момент.
      */
     const extractOnlineFromPacket = (bytes) => {
-      if (bytes.length < 10) return null;
+      if (bytes.length < NUMPLACES_OFFSET + 2) return null;
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      const candidates = {};
-      // Проходим по байтам пакета с шагом 2
-      for (let i = 3; i <= bytes.length - 4; i += 2) {
-        const place = view.getUint16(i, false); // Big-Endian ushort (место)
-        const numPlaces = view.getUint16(i + 2, false); // Big-Endian ushort (всего игроков)
-        // Валидация значений, характерных для LBS:
-        // 1. Место от 1 до 300
-        // 2. Общий онлайн на арене от place до 300
-        // 3. Отсеиваем значения 10 (часто совпадает с размером лидерборда)
-        if (place >= 1 && place <= 300 && numPlaces >= place && numPlaces <= 300 && numPlaces !== 10) {
-          candidates[numPlaces] = (candidates[numPlaces] || 0) + 1;
-        }
-      }
-      // Находим самое частовстречаемое значение
-      const sorted = Object.entries(candidates).sort((a, b) => b[1] - a[1]);
-      if (sorted.length > 0) {
-        return parseInt(sorted[0][0], 10);
+      const numPlaces = view.getUint16(NUMPLACES_OFFSET, false); // Big-Endian ushort
+      if (numPlaces >= 1 && numPlaces <= VALID_NUMPLACES_MAX) {
+        return numPlaces;
       }
       return null;
-    };
-
-    // Rebuild card body with player count
-    const updateWithPlayerCount = () => {
-      const sorted = Object.entries(playerCountCandidates).sort((a, b) => b[1] - a[1]);
-      const pc = sorted.length > 0 && sorted[0][1] >= 2 ? parseInt(sorted[0][0]) : null;
-      if (!lastLb || lastPing === null) return;
-      const pingClass = lastPing < 120 ? 'fast' : lastPing < 300 ? 'mid' : 'slow';
-      let html = `<div>Пинг: <span class="ping ${pingClass}">${Math.round(lastPing)} ms</span></div>`;
-      if (pc !== null) {
-        html += `<div class="player-count">👥 Игроков: <b>${pc}</b></div>`;
-      }
-      if (lastLb.hasData && lastLb.players.length) {
-        html += `<div class="leaderboard"><div class="leaderboard-title">Топ 10 игроков</div>`;
-        lastLb.players.forEach(p => {
-          const massStr = p.mass.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-          const big = p.mass > 1000000 ? ' 🍖' : '';
-          html += `<div class="player-row">
-            <div class="player-pos">${p.rank}</div>
-            <div class="player-name" title="${p.name} (${p.id})">${p.name}</div>
-            <div class="player-mass">${massStr}${big}</div>
-            <div class="player-extra ${p.badgeClass}">${p.badge || ''}</div>
-          </div>`;
-        });
-        html += `</div>`;
-        if (lastLb.players.some(x=>x.mass>1000000)) {
-          html += `<div style="margin-top:6px;color:#8eff8e;font-size:11px;">⚡ Обнаружен большой змей >1M!</div>`;
-        }
-      } else {
-        html += `<div class="raw-dump">${lastLb.note || 'Нет данных топа'}</div>`;
-      }
-      updateBody(html);
     };
 
     const overallTimeout = setTimeout(() => {
@@ -396,8 +346,6 @@ function checkSingleServer(server, cardEl) {
       }
       // 1. Извлекаем лидерборд (топ-10)
       const lb = parseLeaderboard(ev.data);
-      lastLb = lb;
-      lastPing = ping;
       // 2. Извлекаем РЕАЛЬНЫЙ онлайн арены из структуры пакета
       const onlinePlayers = extractOnlineFromPacket(bytes);
       // 3. Формируем UI карточки
